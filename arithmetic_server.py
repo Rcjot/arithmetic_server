@@ -29,7 +29,6 @@ def arithmetic_unit(tokens) :
     quitting = False
 
     tokenc = len(tokens)
-    print("tokenc", tokenc)
     op = "" if tokenc <=0 else tokens[0]
 
     if op in two_params :
@@ -114,11 +113,9 @@ def service_connection(key, mask):
             is_timing_mark = b'\xff\xfd\x06' in recv_data
 
             if is_iac_ip:
-                print("IAC IP hello")
                 data.outb = b""
 
             if is_timing_mark:
-                print("IAC DO TIMING MARK hello")
                 sock.send(b'\xff\xfb\x06')
                 return
 
@@ -133,30 +130,36 @@ def service_connection(key, mask):
             # tokenize
             if b"\n" in data.outb :
 
-                print("processing", data.outb)
-
-                input_len = len(data.outb)
-
                 # should ensure that the data.outb here can be decoded into utf-8
                 clean_data = data.outb.decode("utf-8")
 
                 commands = clean_data.split("\n")
+                print("commands", commands)
 
                 commands_tokens = tokenize_commands(commands)
-                print("command_tokens", commands_tokens)
+
+
+                # effective length, just  cuts off trailing unfinished command 
                 commandc = len(commands_tokens)
                 trailing = len(commands_tokens[commandc - 1])
-
-
-                # effective length, jus  cuts off trailing unfinished command 
+                input_len = len(data.outb)
                 eff_input_len = input_len - trailing
-
-                print(eff_input_len)
 
                 # do not include the last item
                 # since it is either empty or incomplete
-                for tokens in commands_tokens[:-1] :
+                for index, tokens in enumerate(commands_tokens[:-1]):
                     if len(tokens) > 0 :
+
+                        # check command line length, must not be > 256
+                        # + 1, to include \n
+                        command_len = len(commands[index]) + 1
+                        print(command_len)
+                        if command_len > 256:
+                            ret = "ERR command too long\n"
+                            sock.send(ret.encode("utf-8"))
+                            continue
+
+
                         ret, ok, quitting = arithmetic_unit(tokens)
                         
                         if (ok) :
@@ -166,8 +169,6 @@ def service_connection(key, mask):
 
                         ret += "\n"
 
-
-                        print("returned", ret)
                         sock.send(ret.encode("utf-8"))  # Should be ready to write
 
                         if quitting : 
@@ -179,9 +180,6 @@ def service_connection(key, mask):
                 data.outb = data.outb[eff_input_len:]# ...
                 print(data.outb, "after")
 
-            else : 
-                if (len(data.outb) > 256) :
-                    pass
 
 def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
