@@ -26,6 +26,7 @@ def arithmetic_unit(tokens) :
     two_params = ["ADD", "SUB", "MUL", "DIV"]
     res = ""
     ok = True
+    quitting = False
 
     tokenc = len(tokens)
     print("tokenc", tokenc)
@@ -33,13 +34,13 @@ def arithmetic_unit(tokens) :
 
     if op in two_params :
         if tokenc != 3 :
-            return f"argument count does not match! Expecting 2, received {tokenc - 1}", False
+            return f"argument count does not match! Expecting 2, received {tokenc - 1}", False, quitting
 
         try :
             operand1 = int(tokens[1])
             operand2 = int(tokens[2])
         except :
-            return "One of the operands is an invalid integer", False
+            return "One of the operands is an invalid integer", False, quitting
 
         if (op == "ADD") :
             res = operand1 + operand2 
@@ -49,7 +50,7 @@ def arithmetic_unit(tokens) :
             res = operand1 * operand2 
         elif (op == "DIV") :
             if operand2 == 0 :
-                return "Divisor cannot be zero", False
+                return "Divisor cannot be zero", False, quitting
             res = operand1 / operand2 
     elif (op == "RND") :
         if tokenc != 2 :
@@ -58,7 +59,7 @@ def arithmetic_unit(tokens) :
         try :
             operand1 = int(tokens[1])
         except :
-            return "One of the operands is an invalid integer", False
+            return "One of the operands is an invalid integer", False, quitting
 
         res = random.randint(1, operand1)
     elif (op == "HIST") :
@@ -79,12 +80,13 @@ def arithmetic_unit(tokens) :
     on success - OK <result>
     on any error - ERR <message>"""
     elif (op == "QUIT") :
-        pass
+        res = "Bye."
+        quitting = True
     else: 
         res =  "invalid command! Enter HELP to get help."
         ok = False
     
-    return str(res), ok
+    return str(res), ok, quitting
         
 
 def tokenize_commands(commands) :
@@ -155,7 +157,7 @@ def service_connection(key, mask):
                 # since it is either empty or incomplete
                 for tokens in commands_tokens[:-1] :
                     if len(tokens) > 0 :
-                        ret, ok = arithmetic_unit(tokens)
+                        ret, ok, quitting = arithmetic_unit(tokens)
                         
                         if (ok) :
                             ret = "OK " + ret
@@ -164,8 +166,15 @@ def service_connection(key, mask):
 
                         ret += "\n"
 
+
                         print("returned", ret)
                         sock.send(ret.encode("utf-8"))  # Should be ready to write
+
+                        if quitting : 
+                            sel.unregister(sock)
+                            sock.close()
+                            return
+
                 print(data.outb, "before")
                 data.outb = data.outb[eff_input_len:]# ...
                 print(data.outb, "after")
