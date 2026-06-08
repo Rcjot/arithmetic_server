@@ -21,4 +21,5 @@ if __name__ == "__main__":
             time.sleep(0.5)
 
         response = s.recv(1024)
-        print("Server response:", response.decode().strip())
+        print("Server response:")
+        print(response.decode().strip())

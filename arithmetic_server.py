@@ -9,28 +9,62 @@ import socket
 import selectors
 import types
 import argparse
+import random
 
 sel = selectors.DefaultSelector()
 
 
 def arithmetic_unit(tokens) :
+    """
+    returns 
+        response, ok
+
+    response -  response from opes or message when error
+    ok - True or False
+    """
+
+    two_params = ["ADD", "SUB", "MUL", "DIV"]
+    res = ""
+    ok = True
+
     tokenc = len(tokens)
+    print("tokenc", tokenc)
     op = "" if tokenc <=0 else tokens[0]
 
-    if (op == "ADD") :
-        return "ADD"
-    elif (op == "SUB") :
-        return "SUB"
-    elif (op == "MUL") :
-        return "MUL"
-    elif (op == "DIV") :
-        return "DIV"
+    if op in two_params :
+        if tokenc != 3 :
+            return f"argument count does not match! Expecting 2, received {tokenc - 1}", False
+
+        try :
+            operand1 = int(tokens[1])
+            operand2 = int(tokens[2])
+        except :
+            return "One of the operands is an invalid integer", False
+
+        if (op == "ADD") :
+            res = operand1 + operand2 
+        elif (op == "SUB") :
+            res = operand1 - operand2 
+        elif (op == "MUL") :
+            res = operand1 * operand2 
+        elif (op == "DIV") :
+            if operand2 == 0 :
+                return "Divisor cannot be zero", False
+            res = operand1 / operand2 
     elif (op == "RND") :
-        return "RND"
+        if tokenc != 2 :
+            return f"Argument count does not match! Expecting 1, received {tokenc - 1}", False
+
+        try :
+            operand1 = int(tokens[1])
+        except :
+            return "One of the operands is an invalid integer", False
+
+        res = random.randint(1, operand1)
     elif (op == "HIST") :
-        return "HIST"
+        res =  "HIST"
     elif (op == "HELP") :
-        return """ 
+        res =  """ 
     Commands:
     ADD <N1> <N2> Add N1 and N2.
     SUB <N1> <N2> Subtract N2 from N1.
@@ -47,7 +81,10 @@ def arithmetic_unit(tokens) :
     elif (op == "QUIT") :
         pass
     else: 
-        return "ERR invalid command! Enter HELP to get help."
+        res =  "invalid command! Enter HELP to get help."
+        ok = False
+    
+    return str(res), ok
         
 
 def tokenize_commands(commands) :
@@ -114,7 +151,15 @@ def service_connection(key, mask):
                 # since it is either empty or incomplete
                 for tokens in commands_tokens[:-1] :
                     if len(tokens) > 0 :
-                        ret = arithmetic_unit(tokens) + "\n"
+                        ret, ok = arithmetic_unit(tokens)
+                        
+                        if (ok) :
+                            ret = "OK " + ret
+                        else :
+                            ret = "ERR " + ret
+
+                        ret += "\n"
+
                         print("returned", ret)
                         sock.send(ret.encode("utf-8"))  # Should be ready to write
                 print(data.outb, "before")
