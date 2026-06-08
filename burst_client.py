@@ -1,5 +1,4 @@
 import socket
-import time
 import argparse
 
 if __name__ == "__main__":
@@ -12,10 +11,12 @@ if __name__ == "__main__":
     msg = "ADD 1 2\nSUB 3 4\nMUL 2 5\n"
 
     with socket.create_connection((args.host, args.port)) as s:
-        s.sendall(msg.encode())  # all commands in one go
-
-        # read responses (may come combined too)
-        data = s.recv(4096)
-        print("Server response:")
-        print(data.decode())
-        time.sleep(0.5)
+        s.sendall(msg.encode())
+        expected = msg.count("\n")
+        responses = b""
+        while responses.count(b"\n") < expected:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            responses += chunk
+        print(responses.decode())

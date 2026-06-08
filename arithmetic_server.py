@@ -108,16 +108,20 @@ def service_connection(key, mask):
             sock.close()
             return
         if recv_data:
-            if b'\xff\xf4' in recv_data:  # IAC IP
+            is_iac_ip = b'\xff\xf4' in recv_data
+            is_timing_mark = b'\xff\xfd\x06' in recv_data
+
+            if is_iac_ip:
                 print("IAC IP hello")
-                data.outb = b""            # flush pending input
-                
-            if b'\xff\xfd\x06' in recv_data:  # IAC DO TIMING-MARK
+                data.outb = b""
+
+            if is_timing_mark:
                 print("IAC DO TIMING MARK hello")
-                sock.send(b'\xff\xfb\x06')    # reply IAC WILL TIMING-MARK → telnet resyncs
+                sock.send(b'\xff\xfb\x06')
                 return
-            else :
-                data.outb += recv_data
+
+            if not is_iac_ip and not is_timing_mark:
+                data.outb += recv_data 
         else:
             print(f"Closing connection to {data.addr}")
             sel.unregister(sock)
@@ -169,10 +173,6 @@ def service_connection(key, mask):
             else : 
                 if (len(data.outb) > 256) :
                     pass
-
-
-                
-
 
 def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
