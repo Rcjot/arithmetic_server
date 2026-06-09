@@ -14,7 +14,7 @@ import random
 sel = selectors.DefaultSelector()
 
 
-def arithmetic_unit(tokens) :
+def arithmetic_unit(tokens, hist, writing_idx) :
     """
     returns 
         response, ok
@@ -27,19 +27,21 @@ def arithmetic_unit(tokens) :
     res = ""
     ok = True
     quitting = False
+    hist_append = False
 
     tokenc = len(tokens)
     op = "" if tokenc <=0 else tokens[0]
 
     if op in two_params :
         if tokenc != 3 :
-            return f"argument count does not match! Expecting 2, received {tokenc - 1}", False, quitting
+            return f"argument count does not match! Expecting 2, received {tokenc - 1}", False, quitting, hist_append
 
         try :
             operand1 = int(tokens[1])
             operand2 = int(tokens[2])
         except :
-            return "One of the operands is an invalid integer", False, quitting
+            return "One of the operands is an invalid integer", False, quitting, hist_append
+
 
         if (op == "ADD") :
             res = operand1 + operand2 
@@ -49,29 +51,40 @@ def arithmetic_unit(tokens) :
             res = operand1 * operand2 
         elif (op == "DIV") :
             if operand2 == 0 :
-                return "Divisor cannot be zero", False, quitting
+                return "Divisor cannot be zero", False, quitting, hist_append
             res = operand1 / operand2 
+
+        hist_append = True
     elif (op == "RND") :
         if tokenc != 2 :
-            return f"Argument count does not match! Expecting 1, received {tokenc - 1}", False, quitting
+            return f"Argument count does not match! Expecting 1, received {tokenc - 1}", False, quitting, hist_append
 
         try :
             operand1 = int(tokens[1])
         except :
-            return "One of the operands is an invalid integer", False, quitting
+            return "One of the operands is an invalid integer", False, quitting, hist_append
 
         res = random.randint(1, operand1)
+
+        hist_append = True
     elif (op == "HIST") :
-        res =  "HIST"
+        newest_chunk = "\n".join(hist[:writing_idx:][::-1])
+
+        oldest_chunk = "\n".join(hist[writing_idx::][::-1]) if None not in hist else ""
+
+        if oldest_chunk :
+            res = newest_chunk + "\n" + oldest_chunk
+        else :
+            res = newest_chunk
     elif (op == "HELP") :
         valid_args = ["GLOBAL", "ADD", "SUB", "MUL", "DIV", "RND", "HIST", "HELP", "QUIT"]
 
         if tokenc > 2 :
-            return f"Argument count does not match! Expecting 0 or 1, received {tokenc - 1}", False, quitting
+            return f"Argument count does not match! Expecting 0 or 1, received {tokenc - 1}", False, quitting, hist_append
         arg = tokens[1] if tokenc == 2 else "GLOBAL"
 
         if arg not in valid_args :
-            return f"Such operation does not exist!", False, quitting
+            return f"Such operation does not exist!", False, quitting, hist_append
 
         help_map = {
             "GLOBAL": """Commands:
@@ -107,7 +120,7 @@ def arithmetic_unit(tokens) :
         res =  "invalid command! Enter HELP to get help."
         ok = False
     
-    return str(res), ok, quitting
+    return str(res), ok, quitting, hist_append
         
 
 def tokenize_commands(commands) :
@@ -182,7 +195,7 @@ def service_connection(key, mask):
                             continue
 
 
-                        ret, ok, quitting = arithmetic_unit(tokens)
+                        ret, ok, quitting, hist_append = arithmetic_unit(tokens, data.hist, data.writing_idx)
                         
                         if (ok) :
                             ret = "OK " + ret
@@ -190,6 +203,13 @@ def service_connection(key, mask):
                             ret = "ERR " + ret
 
                         ret += "\n"
+
+
+                        # append to history
+                        if hist_append : 
+                            data.hist[data.writing_idx] = " ".join(tokens)
+                            data.writing_idx = (data.writing_idx + 1) % 5
+                            print(data.hist)
 
                         sock.send(ret.encode("utf-8"))  # Should be ready to write
 
@@ -207,7 +227,7 @@ def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
     print(f"Accepted connection from {addr}")
     conn.setblocking(False)
-    data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"")
+    data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"", hist=[None] * 5, writing_idx=0)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     sel.register(conn, events, data=data)
 
