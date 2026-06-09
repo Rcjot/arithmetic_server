@@ -53,7 +53,7 @@ def arithmetic_unit(tokens) :
             res = operand1 / operand2 
     elif (op == "RND") :
         if tokenc != 2 :
-            return f"Argument count does not match! Expecting 1, received {tokenc - 1}", False
+            return f"Argument count does not match! Expecting 1, received {tokenc - 1}", False, quitting
 
         try :
             operand1 = int(tokens[1])
@@ -64,20 +64,42 @@ def arithmetic_unit(tokens) :
     elif (op == "HIST") :
         res =  "HIST"
     elif (op == "HELP") :
-        res =  """ 
-    Commands:
-    ADD <N1> <N2> Add N1 and N2.
-    SUB <N1> <N2> Subtract N2 from N1.
-    MUL <N1> <N2> Multiply N1 by N2.
-    DIV <N1> <N2> Integer-divide N1 by N2.
-    RND <N> Return a random integer in [1, N].
-    HIST Show up to the last 5 valid operations for this connection only.
-    HELP [command] Show all commands, or detailed help for one command.
-    QUIT End the session.
+        valid_args = ["GLOBAL", "ADD", "SUB", "MUL", "DIV", "RND", "HIST", "HELP", "QUIT"]
 
-    Server Responses:
-    on success - OK <result>
-    on any error - ERR <message>"""
+        if tokenc > 2 :
+            return f"Argument count does not match! Expecting 0 or 1, received {tokenc - 1}", False, quitting
+        arg = tokens[1] if tokenc == 2 else "GLOBAL"
+
+        if arg not in valid_args :
+            return f"Such operation does not exist!", False, quitting
+
+        help_map = {
+            "GLOBAL": """Commands:
+            ADD <N1> <N2> Add N1 and N2.
+            SUB <N1> <N2> Subtract N2 from N1.
+            MUL <N1> <N2> Multiply N1 by N2.
+            DIV <N1> <N2> Integer-divide N1 by N2.
+            RND <N> Return a random integer in [1, N].
+            HIST Show up to the last 5 valid operations for this connection only.
+            HELP [command] Show all commands, or detailed help for one command.
+            QUIT End the session.
+
+        Server Responses:
+            on success - OK <result>
+            on any error - ERR <message>""",
+
+            "ADD": "Usage: ADD <N1> <N2>\nAdds two integers N1 and N2 together.",
+            "SUB": "Usage: SUB <N1> <N2>\nSubtracts integer N2 from N1.",
+            "MUL": "Usage: MUL <N1> <N2>\nMultiplies integer N1 by N2.",
+            "DIV": "Usage: DIV <N1> <N2>\nInteger-divides N1 by N2. Returns a truncated integer.",
+            "RND": "Usage: RND <N>\nReturns a random integer inclusive between 1 and N.",
+            "HIST": "Usage: HIST\nDisplays up to the last 5 successful mathematical operations executed in this session.",
+            "HELP": "Usage: HELP [command]\nShows the main command index, or specific usage instructions for a given command.",
+            "QUIT": "Usage: QUIT\nTerminates the active network session gracefully."
+        } 
+
+        res = help_map[arg]
+
     elif (op == "QUIT") :
         res = "Bye."
         quitting = True
