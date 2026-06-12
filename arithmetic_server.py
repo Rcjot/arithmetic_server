@@ -83,7 +83,7 @@ def arithmetic_unit(tokens, hist, writing_idx, last_ans) :
         else :
             res += newest_chunk
     elif (op == "HELP") :
-        valid_args = ["GLOBAL", "ADD", "SUB", "MUL", "DIV", "RND", "HIST", "HELP", "QUIT"]
+        valid_args = ["GLOBAL", "ADD", "SUB", "MUL", "DIV", "RND", "ANS", "HIST", "HELP", "QUIT"]
 
         if tokenc > 2 :
             return f"Invalid number of arguments to HELP", False, quitting, hist_append, last_ans_changed
@@ -99,6 +99,7 @@ SUB <N1> <N2>   - to subtract N2 from N1
 MUL <N1> <N2>   - to multiply N1 by N2
 DIV <N1> <N2>   - to divide N1 by N2
 RND <N>         - to generate a random number between 1 and N, inclusive
+ANS             - to show the last calculated answer or use as an operand
 HIST            - to show the last 5 valid operations in the session
 HELP [command]  - to display the syntax and semantics of a specific
 command. If no command is specified, it will display all the available
@@ -110,6 +111,7 @@ QUIT            - to end the current session of the arithmetic server""",
             "MUL": "MUL <N1> <N2> - to multiply N1 by N2",
             "DIV": "DIV <N1> <N2> - to divide N1 by N2",
             "RND": "RND <N> - to generate a random number between 1 and N, inclusive",
+            "ANS": "ANS - to show the last calculated answer or use as an operand",
             "HIST": "HIST - to show the last 5 valid operations in the session",
             "HELP": """HELP [command] - to display the syntax and semantics of a specific
 command. If no command is specified, it will display all the available
