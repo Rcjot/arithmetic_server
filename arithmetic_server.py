@@ -1,5 +1,3 @@
-
-
 ### NOTE: Run this in the command-line as,
 ###
 ###     python3 socket_echo_server.py
@@ -10,6 +8,7 @@ import selectors
 import types
 import argparse
 import random
+from datetime import datetime
 
 sel = selectors.DefaultSelector()
 
@@ -138,6 +137,21 @@ def service_connection(key, mask):
     if mask & selectors.EVENT_READ:
         try:
             recv_data = sock.recv(1024)
+            
+            # Timestamp generation (millisecond precision: HH:MM:SS.mmm)
+            now = datetime.now()
+            timestamp = now.strftime("[%H:%M:%S") + f".{now.microsecond // 1000:03d}]"
+            
+            # Client information context
+            client_ip, client_port = data.addr
+            
+            # Construct the exact log layout required
+            log_line = f"{timestamp} {client_ip}:{client_port} recv() -> {len(recv_data)} bytes {repr(recv_data)}\n"
+            
+            # Append log transaction securely to file
+            with open("recv.log", "a", encoding="utf-8") as log_file:
+                log_file.write(log_line)
+
         except ConnectionResetError:
             # Catch the abrupt client hang-up safely
             print(f"Client {data.addr} abruptly reset the connection.")
@@ -271,7 +285,3 @@ if __name__ == "__main__":
         print("Caught keyboard interrupt, exiting")
     finally:
         sel.close()
-
-
-
-
