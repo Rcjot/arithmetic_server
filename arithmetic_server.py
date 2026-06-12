@@ -13,7 +13,7 @@ from datetime import datetime
 sel = selectors.DefaultSelector()
 
 
-def arithmetic_unit(tokens, hist, writing_idx) :
+def arithmetic_unit(tokens, hist, writing_idx, last_ans) :
     """
     returns 
         response, ok
@@ -27,19 +27,20 @@ def arithmetic_unit(tokens, hist, writing_idx) :
     ok = True
     quitting = False
     hist_append = False
+    last_ans_changed = False
 
     tokenc = len(tokens)
     op = "" if tokenc <=0 else tokens[0]
 
     if op in two_params :
         if tokenc != 3 :
-            return f"Invalid number of arguments to {op}", False, quitting, hist_append
+            return f"Invalid number of arguments to {op}", False, quitting, hist_append, last_ans_changed
 
         try :
-            operand1 = int(tokens[1])
-            operand2 = int(tokens[2])
+            operand1 = int(last_ans) if tokens[1] == "ANS" else int(tokens[1])
+            operand2 =  int(last_ans) if tokens[2] == "ANS" else int(tokens[2])
         except :
-            return "One of the operands is an invalid integer", False, quitting, hist_append
+            return "One of the operands is an invalid integer", False, quitting, hist_append, last_ans_changed
 
 
         if (op == "ADD") :
@@ -50,22 +51,26 @@ def arithmetic_unit(tokens, hist, writing_idx) :
             res = operand1 * operand2 
         elif (op == "DIV") :
             if operand2 == 0 :
-                return "Divisor cannot be zero", False, quitting, hist_append
+                return "Divisor cannot be zero", False, quitting, hist_append, last_ans_changed
             res = operand1 / operand2 
 
         hist_append = True
+        last_ans_changed = True
     elif (op == "RND") :
         if tokenc != 2 :
-            return f"Invalid number of arguments to RND", False, quitting, hist_append
+            return f"Invalid number of arguments to RND", False, quitting, hist_append, last_ans_changed
 
         try :
-            operand1 = int(tokens[1])
+            operand1 = int(last_ans) if tokens[1] == "ANS" else int(tokens[1])
         except :
-            return "One of the operands is an invalid integer", False, quitting, hist_append
+            return "One of the operands is an invalid integer", False, quitting, hist_append, last_ans_changed
 
         res = random.randint(1, operand1)
 
         hist_append = True
+        last_ans_changed = True
+    elif (op == "ANS") :
+        res = last_ans
     elif (op == "HIST") :
         newest_chunk = "\n".join(hist[:writing_idx:])
 
@@ -81,11 +86,11 @@ def arithmetic_unit(tokens, hist, writing_idx) :
         valid_args = ["GLOBAL", "ADD", "SUB", "MUL", "DIV", "RND", "HIST", "HELP", "QUIT"]
 
         if tokenc > 2 :
-            return f"Invalid number of arguments to HELP", False, quitting, hist_append
+            return f"Invalid number of arguments to HELP", False, quitting, hist_append, last_ans_changed
         arg = tokens[1] if tokenc == 2 else "GLOBAL"
 
         if arg not in valid_args :
-            return f"Such operation does not exist!", False, quitting, hist_append
+            return f"Such operation does not exist!", False, quitting, hist_append, last_ans_changed
 
         help_map = {
             "GLOBAL": """The following commands are available:
@@ -120,7 +125,7 @@ commands and their meanings""",
         res =  f"Unknown operation {op}"
         ok = False
     
-    return str(res), ok, quitting, hist_append
+    return str(res), ok, quitting, hist_append, last_ans_changed
         
 
 def tokenize_commands(commands) :
@@ -193,7 +198,10 @@ def service_connection(key, mask):
                             data.outb += b"ERR command too long\n"
                             continue
 
-                        ret, ok, quitting, hist_append = arithmetic_unit(tokens, data.hist, data.writing_idx)
+                        ret, ok, quitting, hist_append, last_ans_changed = arithmetic_unit(tokens, data.hist, data.writing_idx, data.last_ans)
+
+                        if last_ans_changed:
+                            data.last_ans = ret
 
                         if hist_append:
                             data.hist[data.writing_idx] = " ".join(tokens) + f" -> {ret}"
@@ -211,9 +219,7 @@ def service_connection(key, mask):
                             data.closing = True
                             break
 
-                print(data.inb, "before")
                 data.inb = data.inb[eff_input_len:]
-                print(data.inb, "after")
 
         else:
             print(f"Closing connection to {data.addr}")
@@ -233,7 +239,7 @@ def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
     print(f"Accepted connection from {addr}")
     conn.setblocking(False)
-    data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"", closing=False, hist=[None] * 5, writing_idx=0)
+    data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"", closing=False, hist=[None] * 5, writing_idx=0, last_ans=None)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     sel.register(conn, events, data=data)
 
