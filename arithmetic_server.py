@@ -10,6 +10,8 @@ import argparse
 import random
 from datetime import datetime
 
+# Single selector instance shared across all connections.
+# Monitors all sockets (listening + per-client) for read/write readiness.
 sel = selectors.DefaultSelector()
 
 
@@ -37,6 +39,7 @@ def arithmetic_unit(tokens, hist, writing_idx, last_ans) :
             return f"Invalid number of arguments to {op}", False, quitting, hist_append, last_ans_changed
 
         try :
+            # ANS is a special token that substitutes the result of the last successful operation
             operand1 = int(last_ans) if tokens[1] == "ANS" else int(tokens[1])
             operand2 =  int(last_ans) if tokens[2] == "ANS" else int(tokens[2])
         except :
@@ -72,6 +75,9 @@ def arithmetic_unit(tokens, hist, writing_idx, last_ans) :
     elif (op == "ANS") :
         res = last_ans
     elif (op == "HIST") :
+        # hist is a circular buffer of size 5. writing_idx points to the next slot to be written,
+        # so entries before it are newer and entries from writing_idx onward are older.
+        # When the buffer isn't full yet (contains None), there are no older entries.
         newest_chunk = "\n".join(hist[:writing_idx:])
 
         oldest_chunk = "\n".join(hist[writing_idx::]) if None not in hist else ""
@@ -170,16 +176,22 @@ def service_connection(key, mask):
             is_timing_mark = b'\xff\xfd\x06' in recv_data
 
             if is_iac_ip:
+                # Ctrl+C in telnet sends IAC IP. Flush the input buffer so the
+                # interrupted partial command doesn't get processed.
                 data.inb = b""
 
             if is_timing_mark:
+                # Telnet sends IAC DO TIMING-MARK after an interrupt to re-sync output.
+                # We must reply with IAC WILL TIMING-MARK, otherwise telnet silently
+                # discards all server output until it receives this acknowledgment.
                 sock.send(b'\xff\xfb\x06')
                 return
 
             if not is_iac_ip and not is_timing_mark:
                 data.inb += recv_data
 
-            # process any complete commands immediately
+            # Only process once we have at least one complete command.
+            # Bytes before the final newline may be a partial command still being typed.
             if b"\n" in data.inb:
                 clean_data = data.inb.decode("utf-8")
                 commands = clean_data.split("\n")
@@ -188,6 +200,8 @@ def service_connection(key, mask):
                 commands_tokens = tokenize_commands(commands)
 
                 commandc = len(commands_tokens)
+                # The last token list is either empty (trailing newline) or an incomplete
+                # command with no newline yet. Either way, leave it in the buffer.
                 trailing = len(commands_tokens[commandc - 1])
                 input_len = len(data.inb)
                 eff_input_len = input_len - trailing
@@ -218,6 +232,8 @@ def service_connection(key, mask):
                         data.outb += ret.encode("utf-8")
 
                         if quitting:
+                            # Don't close immediately, set a flag so EVENT_WRITE
+                            # can drain the "Bye." response before closing.
                             data.closing = True
                             break
 
@@ -229,6 +245,8 @@ def service_connection(key, mask):
             sock.close()
     if mask & selectors.EVENT_WRITE:
         if data.outb:
+            # send() may not send all bytes in one call, so track how many were
+            # actually sent and keep the rest in the buffer for the next write event.
             sent = sock.send(data.outb)
             data.outb = data.outb[sent:]
         if data.closing and not data.outb:
@@ -241,6 +259,9 @@ def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
     print(f"Accepted connection from {addr}")
     conn.setblocking(False)
+    # Per-connection state. inb accumulates raw bytes until a full command arrives.
+    # outb holds encoded responses waiting to be drained by EVENT_WRITE.
+    # hist is a circular buffer of the last 5 successful operations.
     data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"", closing=False, hist=[None] * 5, writing_idx=0, last_ans=None)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     sel.register(conn, events, data=data)
