@@ -163,86 +163,77 @@ def service_connection(key, mask):
             is_timing_mark = b'\xff\xfd\x06' in recv_data
 
             if is_iac_ip:
-                data.outb = b""
+                data.inb = b""
 
             if is_timing_mark:
                 sock.send(b'\xff\xfb\x06')
                 return
 
             if not is_iac_ip and not is_timing_mark:
-                data.outb += recv_data 
+                data.inb += recv_data
+
+            # process any complete commands immediately
+            if b"\n" in data.inb:
+                clean_data = data.inb.decode("utf-8")
+                commands = clean_data.split("\n")
+                print("commands", commands)
+
+                commands_tokens = tokenize_commands(commands)
+
+                commandc = len(commands_tokens)
+                trailing = len(commands_tokens[commandc - 1])
+                input_len = len(data.inb)
+                eff_input_len = input_len - trailing
+
+                for index, tokens in enumerate(commands_tokens[:-1]):
+                    if len(tokens) > 0:
+
+                        command_len = len(commands[index]) + 1
+                        if command_len > 256:
+                            data.outb += b"ERR command too long\n"
+                            continue
+
+                        ret, ok, quitting, hist_append = arithmetic_unit(tokens, data.hist, data.writing_idx)
+
+                        if hist_append:
+                            data.hist[data.writing_idx] = " ".join(tokens) + f" -> {ret}"
+                            data.writing_idx = (data.writing_idx + 1) % 5
+
+                        if ok:
+                            ret = "OK " + ret
+                        else:
+                            ret = "ERR " + ret
+
+                        ret += "\n"
+                        data.outb += ret.encode("utf-8")
+
+                        if quitting:
+                            data.closing = True
+                            break
+
+                print(data.inb, "before")
+                data.inb = data.inb[eff_input_len:]
+                print(data.inb, "after")
+
         else:
             print(f"Closing connection to {data.addr}")
             sel.unregister(sock)
             sock.close()
     if mask & selectors.EVENT_WRITE:
         if data.outb:
-            # tokenize
-            if b"\n" in data.outb :
-
-                # should ensure that the data.outb here can be decoded into utf-8
-                clean_data = data.outb.decode("utf-8")
-
-                commands = clean_data.split("\n")
-                print("commands", commands)
-
-                commands_tokens = tokenize_commands(commands)
-
-
-                # effective length, just  cuts off trailing unfinished command 
-                commandc = len(commands_tokens)
-                trailing = len(commands_tokens[commandc - 1])
-                input_len = len(data.outb)
-                eff_input_len = input_len - trailing
-
-                # do not include the last item
-                # since it is either empty or incomplete
-                for index, tokens in enumerate(commands_tokens[:-1]):
-                    if len(tokens) > 0 :
-
-                        # check command line length, must not be > 256
-                        # + 1, to include \n
-                        command_len = len(commands[index]) + 1
-                        if command_len > 256:
-                            ret = "ERR command too long\n"
-                            sock.send(ret.encode("utf-8"))
-                            continue
-
-
-                        ret, ok, quitting, hist_append = arithmetic_unit(tokens, data.hist, data.writing_idx)
-
-                        # append to history
-                        if hist_append : 
-                            data.hist[data.writing_idx] = " ".join(tokens) + f" -> {ret}"
-                            data.writing_idx = (data.writing_idx + 1) % 5
-
-
-                        
-                        if (ok) :
-                            ret = "OK " + ret
-                        else :
-                            ret = "ERR " + ret
-
-                        ret += "\n"
-
-
-                        sock.send(ret.encode("utf-8"))  # Should be ready to write
-
-                        if quitting : 
-                            sel.unregister(sock)
-                            sock.close()
-                            return
-
-                print(data.outb, "before")
-                data.outb = data.outb[eff_input_len:]# ...
-                print(data.outb, "after")
+            sent = sock.send(data.outb)
+            data.outb = data.outb[sent:]
+        if data.closing and not data.outb:
+            print(f"Closing connection to {data.addr} after QUIT")
+            sel.unregister(sock)
+            sock.close()
 
 
 def accept_wrapper(sock):
     conn, addr = sock.accept()  # Should be ready to read
     print(f"Accepted connection from {addr}")
     conn.setblocking(False)
-    data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"", hist=[None] * 5, writing_idx=0)
+    data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"", closing=False, hist=[None] * 5, writing_idx=0)
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     sel.register(conn, events, data=data)
 
