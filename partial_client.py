@@ -4,7 +4,7 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=14350)
+    parser.add_argument("--port", type=int, default=14344)
     parser.add_argument("--host", type=str, default="localhost")
 
     args = parser.parse_args()
