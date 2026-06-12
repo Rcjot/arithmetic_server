@@ -34,7 +34,7 @@ def arithmetic_unit(tokens, hist, writing_idx) :
 
     if op in two_params :
         if tokenc != 3 :
-            return f"argument count does not match! Expecting 2, received {tokenc - 1}", False, quitting, hist_append
+            return f"Invalid number of arguments to {op}", False, quitting, hist_append
 
         try :
             operand1 = int(tokens[1])
@@ -57,7 +57,7 @@ def arithmetic_unit(tokens, hist, writing_idx) :
         hist_append = True
     elif (op == "RND") :
         if tokenc != 2 :
-            return f"Argument count does not match! Expecting 1, received {tokenc - 1}", False, quitting, hist_append
+            return f"Invalid number of arguments to RND", False, quitting, hist_append
 
         try :
             operand1 = int(tokens[1])
@@ -68,56 +68,57 @@ def arithmetic_unit(tokens, hist, writing_idx) :
 
         hist_append = True
     elif (op == "HIST") :
-        newest_chunk = "\n".join(hist[:writing_idx:][::-1])
+        newest_chunk = "\n".join(hist[:writing_idx:])
 
-        oldest_chunk = "\n".join(hist[writing_idx::][::-1]) if None not in hist else ""
+        oldest_chunk = "\n".join(hist[writing_idx::]) if None not in hist else ""
+
+        res = "The last valid operations from this session (up to 5) are:\n"
 
         if oldest_chunk :
-            res = newest_chunk + "\n" + oldest_chunk
+            res += oldest_chunk + "\n" + newest_chunk
         else :
-            res = newest_chunk
+            res += newest_chunk
     elif (op == "HELP") :
         valid_args = ["GLOBAL", "ADD", "SUB", "MUL", "DIV", "RND", "HIST", "HELP", "QUIT"]
 
         if tokenc > 2 :
-            return f"Argument count does not match! Expecting 0 or 1, received {tokenc - 1}", False, quitting, hist_append
+            return f"Invalid number of arguments to HELP", False, quitting, hist_append
         arg = tokens[1] if tokenc == 2 else "GLOBAL"
 
         if arg not in valid_args :
             return f"Such operation does not exist!", False, quitting, hist_append
 
         help_map = {
-            "GLOBAL": """Commands:
-            ADD <N1> <N2> Add N1 and N2.
-            SUB <N1> <N2> Subtract N2 from N1.
-            MUL <N1> <N2> Multiply N1 by N2.
-            DIV <N1> <N2> Integer-divide N1 by N2.
-            RND <N> Return a random integer in [1, N].
-            HIST Show up to the last 5 valid operations for this connection only.
-            HELP [command] Show all commands, or detailed help for one command.
-            QUIT End the session.
+            "GLOBAL": """The following commands are available:
+ADD <N1> <N2>   - to add N1 and N2
+SUB <N1> <N2>   - to subtract N2 from N1
+MUL <N1> <N2>   - to multiply N1 by N2
+DIV <N1> <N2>   - to divide N1 by N2
+RND <N>         - to generate a random number between 1 and N, inclusive
+HIST            - to show the last 5 valid operations in the session
+HELP [command]  - to display the syntax and semantics of a specific
+command. If no command is specified, it will display all the available
+commands and their meanings
+QUIT            - to end the current session of the arithmetic server""",
 
-        Server Responses:
-            on success - OK <result>
-            on any error - ERR <message>""",
-
-            "ADD": "Usage: ADD <N1> <N2>\nAdds two integers N1 and N2 together.",
-            "SUB": "Usage: SUB <N1> <N2>\nSubtracts integer N2 from N1.",
-            "MUL": "Usage: MUL <N1> <N2>\nMultiplies integer N1 by N2.",
-            "DIV": "Usage: DIV <N1> <N2>\nInteger-divides N1 by N2. Returns a truncated integer.",
-            "RND": "Usage: RND <N>\nReturns a random integer inclusive between 1 and N.",
-            "HIST": "Usage: HIST\nDisplays up to the last 5 successful mathematical operations executed in this session.",
-            "HELP": "Usage: HELP [command]\nShows the main command index, or specific usage instructions for a given command.",
-            "QUIT": "Usage: QUIT\nTerminates the active network session gracefully."
-        } 
-
-        res = help_map[arg]
+            "ADD": "ADD <N1> <N2> - to add N1 and N2",
+            "SUB": "SUB <N1> <N2> - to subtract N2 from N1",
+            "MUL": "MUL <N1> <N2> - to multiply N1 by N2",
+            "DIV": "DIV <N1> <N2> - to divide N1 by N2",
+            "RND": "RND <N> - to generate a random number between 1 and N, inclusive",
+            "HIST": "HIST - to show the last 5 valid operations in the session",
+            "HELP": """HELP [command] - to display the syntax and semantics of a specific
+command. If no command is specified, it will display all the available
+commands and their meanings""",
+            "QUIT": "QUIT - to end the current session of the arithmetic server"
+        }  
+        res = help_map[arg] + "\n"
 
     elif (op == "QUIT") :
         res = "Bye."
         quitting = True
     else: 
-        res =  "invalid command! Enter HELP to get help."
+        res =  f"Unknown operation {op}"
         ok = False
     
     return str(res), ok, quitting, hist_append
@@ -138,7 +139,7 @@ def service_connection(key, mask):
         try:
             recv_data = sock.recv(1024)
         except ConnectionResetError:
-            # Catch the abrupt client hang-up safely!
+            # Catch the abrupt client hang-up safely
             print(f"Client {data.addr} abruptly reset the connection.")
             sel.unregister(sock)
             sock.close()
@@ -188,7 +189,6 @@ def service_connection(key, mask):
                         # check command line length, must not be > 256
                         # + 1, to include \n
                         command_len = len(commands[index]) + 1
-                        print(command_len)
                         if command_len > 256:
                             ret = "ERR command too long\n"
                             sock.send(ret.encode("utf-8"))
@@ -196,6 +196,13 @@ def service_connection(key, mask):
 
 
                         ret, ok, quitting, hist_append = arithmetic_unit(tokens, data.hist, data.writing_idx)
+
+                        # append to history
+                        if hist_append : 
+                            data.hist[data.writing_idx] = " ".join(tokens) + f" -> {ret}"
+                            data.writing_idx = (data.writing_idx + 1) % 5
+
+
                         
                         if (ok) :
                             ret = "OK " + ret
@@ -204,12 +211,6 @@ def service_connection(key, mask):
 
                         ret += "\n"
 
-
-                        # append to history
-                        if hist_append : 
-                            data.hist[data.writing_idx] = " ".join(tokens)
-                            data.writing_idx = (data.writing_idx + 1) % 5
-                            print(data.hist)
 
                         sock.send(ret.encode("utf-8"))  # Should be ready to write
 
@@ -231,6 +232,8 @@ def accept_wrapper(sock):
     events = selectors.EVENT_READ | selectors.EVENT_WRITE
     sel.register(conn, events, data=data)
 
+    welcome_msg = "OK Welcome to the CSc 113 Arithmetic Server!\n"
+    conn.sendall(welcome_msg.encode("utf-8"))
 
 
 if __name__ == "__main__":
