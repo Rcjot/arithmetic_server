@@ -156,7 +156,7 @@ def service_connection(key, mask):
             log_line = f"{timestamp} {client_ip}:{client_port} recv() -> {len(recv_data)} bytes {repr(recv_data)}\n"
             
             # Append log transaction securely to file
-            with open("recv.log", "a", encoding="utf-8") as log_file:
+            with open("logs/recv.log", "a", encoding="utf-8") as log_file:
                 log_file.write(log_line)
 
         except ConnectionResetError:
