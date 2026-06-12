@@ -55,7 +55,7 @@ def arithmetic_unit(tokens, hist, writing_idx, last_ans) :
         elif (op == "DIV") :
             if operand2 == 0 :
                 return "Divisor cannot be zero", False, quitting, hist_append, last_ans_changed
-            res = operand1 / operand2 
+            res = operand1 // operand2 
 
         hist_append = True
         last_ans_changed = True
